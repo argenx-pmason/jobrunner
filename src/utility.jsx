@@ -355,7 +355,7 @@ export const getFileVersions = async (api, token, file) => {
       return error;
     });
 };
-export const getChildren = async (api, token, path) => {
+export const getChildren = async (api, token, path, setStatus) => {
   const apiRequest = `/repository/containers/${path}?component=children`,
     myHeaders = new Headers();
   myHeaders.append("X-Auth-Token", token);
@@ -367,6 +367,7 @@ export const getChildren = async (api, token, path) => {
   return fetch(api + apiRequest, requestOptions)
     .then((response) => {
       console.log("getChildren - response", response);
+      setStatus(response.status)
       return response.text();
     })
     .then((responseText) => {

@@ -5,12 +5,25 @@ import {
   AppBar,
   Toolbar,
   Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
   Button,
   Tooltip,
   Link,
+  Chip,
   TextField,
 } from "@mui/material";
-import { DataGridPro } from "@mui/x-data-grid-pro";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import { Info } from "@mui/icons-material";
+import {
+  DataGridPro,
+  GridToolbar,
+  GRID_REORDER_COL_DEF,
+  GRID_CHECKBOX_SELECTION_COL_DEF,
+} from "@mui/x-data-grid-pro";
 import { LicenseInfo } from "@mui/x-license";
 import {
   encryptPassword,
@@ -40,13 +53,19 @@ export default function MyComponent() {
     [encryptedPassword, setEncryptedPassword] = useState(""),
     [message, setMessage] = useState(null),
     [openSnackbar, setOpenSnackbar] = useState(false),
-    [rows, setRows] = useState(
-      localJobs.map((row, index) => ({ id: index, ...row }))
-    ),
+    [rows, setRows] = useState([]),
+    // localJobs.map((row, index) => ({ id: index, ...row })
     [webDavPrefix, setWebDavPrefix] = useState(null),
     [fileDownloadPrefix, setFileDownloadPrefix] = useState(null),
     [fileViewer, setFileViewer] = useState(null),
     [logViewer, setLogViewer] = useState(null),
+    [status, setStatus] = useState(null),
+    [openInfo, setOpenInfo] = useState(false),
+    lightTheme = createTheme({
+      palette: {
+        mode: "light",
+      },
+    }),
     cols = [
       {
         field: "path",
@@ -135,7 +154,7 @@ export default function MyComponent() {
       {
         field: "output",
         headerName: "Output",
-        width: 200,
+        width: 1200,
         renderCell: (params) => {
           if (!params.value) return null;
           const links = params.value.map((o, id) => {
@@ -171,6 +190,7 @@ export default function MyComponent() {
     [api, setApi] = useState(undefined),
     [lsafType, setLsafType] = useState(""),
     [path, setPath] = useState(null),
+    [jobs, setJobs] = useState(null),
     [start, setStart] = useState(false),
     handleRunJobs = () => {
       const selectedRows = tableRef.current.getSelectedRows(),
@@ -202,6 +222,25 @@ export default function MyComponent() {
         params.targetIndex,
         rows
       );
+      setRows(newRows);
+    },
+    getJobs = async () => {
+      const response = await getChildren(api, token, path, setStatus),
+        newRows = response.items
+          .filter((i) => i?.path.endsWith(".job"))
+          .map((i, id) => ({ id: id, path: i?.path }));
+      console.log("jobs found from getChildren: ", response, newRows, status);
+      setRows(newRows);
+    },
+    getJobFile = async () => {
+      const response = await fetch(webDavPrefix + jobs),
+        _newRows = await response.json();
+      console.log("_newRows", _newRows);
+      const newRows = _newRows
+        .filter((i) => i?.path.endsWith(".job"))
+        .map((i, id) => ({ id: id, path: i?.path }));
+      setStatus(response.status);
+      console.log("getJobFile - fetch: ", response);
       setRows(newRows);
     };
 
@@ -242,15 +281,9 @@ export default function MyComponent() {
           .focus();
       }, 3000);
     }
-    const getJobs = async () => {
-      const response = await getChildren(api, token, path),
-        newRows = response.items
-          .filter((i) => i?.path.endsWith(".job"))
-          .map((i, id) => ({ id: id, path: i?.path }));
-      console.log("jobs found from getChildren: ", response, newRows);
-      setRows(newRows);
-    };
-    if (token) getJobs();
+
+    if (token && path) getJobs();
+    else if (token && jobs) getJobFile();
   }, [token]);
 
   // can only access window object on client side
@@ -273,7 +306,14 @@ export default function MyComponent() {
           ? "work"
           : "repo",
       queryParameters = new URLSearchParams(window.location.search),
-      _path = queryParameters.get("path"),
+      _path = queryParameters.get("path") ? queryParameters.get("path") : null,
+      _checkEvery = queryParameters.get("checkevery")
+        ? queryParameters.get("checkevery")
+        : 5,
+      _maxWaitSecs = queryParameters.get("maxwaitsecs")
+        ? queryParameters.get("maxwaitsecs")
+        : 600,
+      _jobs = queryParameters.get("jobs") ? queryParameters.get("jobs") : null,
       _webDavPrefix = _lsaf + "/webdav/repo",
       _fileDownloadPrefix = _lsaf + "/filedownload/sdd:",
       _fileViewer =
@@ -292,6 +332,9 @@ export default function MyComponent() {
     setInnerHeight(window.innerHeight);
     setInnerWidth(window.innerWidth);
     setPath(_path);
+    setJobs(_jobs);
+    setCheckEvery(_checkEvery);
+    setMaxWaitSecs(_maxWaitSecs);
     console.log("_api", _api, "window", window);
   }, [onClient]);
 
@@ -334,8 +377,9 @@ export default function MyComponent() {
   }, [start]);
 
   return (
-    <>
-      <AppBar position="fixed">
+    <ThemeProvider theme={lightTheme}>
+      <CssBaseline />
+      <AppBar sx={{ mb: 10 }} position="fixed">
         <Toolbar variant="dense" sx={{ backgroundColor: "#f7f7f7" }}>
           <Box
             sx={{
@@ -345,11 +389,11 @@ export default function MyComponent() {
               fontWeight: "bold",
               boxShadow: 3,
               fontSize: 14,
-              height: 23,
-              padding: 0.3,
+              height: 25,
+              padding: 0.2,
             }}
           >
-            &nbsp;Run job(s) from {path}&nbsp;
+            &nbsp;Run job(s)&nbsp;
           </Box>
           <Tooltip
             title="How often should we check the progress of the job"
@@ -358,7 +402,7 @@ export default function MyComponent() {
             <TextField
               label="Check progress (secs)"
               variant="outlined"
-              value={checkEvery}
+              value={checkEvery || ""}
               size="small"
               onChange={(event) => {
                 setCheckEvery(event.target.value);
@@ -373,7 +417,7 @@ export default function MyComponent() {
             <TextField
               label="Max wait"
               variant="outlined"
-              value={maxWaitSecs}
+              value={maxWaitSecs || ""}
               size="small"
               onChange={(event) => {
                 setMaxWaitSecs(event.target.value);
@@ -389,23 +433,175 @@ export default function MyComponent() {
           >
             Run
           </Button>
+
+          {status !== null && status !== 200 ? (
+            <Chip
+              label={`Can't load path, status=${status}`}
+              color="error"
+              variant="filled"
+              sx={{ ml: 2 }}
+            />
+          ) : null}
+          <Box sx={{ flexGrow: 1 }}></Box>
+          <Tooltip title="Information about this screen">
+            <IconButton
+              color="info"
+              // sx={{ mr: 2 }}
+              onClick={() => {
+                setOpenInfo(true);
+              }}
+            >
+              <Info />
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
-      <Box sx={{ height: 30 }}></Box>
-      <Box sx={{ height: innerHeight - 60, width: innerWidth - 200 }}>
+      <Box sx={{ height: 60 }}>
+        <TextField
+          label="Path to jobs"
+          variant="outlined"
+          value={path || ""}
+          onChange={(event) => {
+            setPath(event.target.value);
+          }}
+          size="small"
+          sx={{ mt: 1, mr: 1, width: 500 }}
+        />
+        <Tooltip title="Load jobs from an LSAF folder">
+          <Button
+            onClick={() => getJobs()}
+            size="small"
+            sx={{ mt: 2, mr: 2 }}
+            color="secondary"
+            variant="contained"
+          >
+            Load
+          </Button>
+        </Tooltip>
+        <TextField
+          label="Path to jobs file"
+          variant="outlined"
+          value={jobs || ""}
+          // shrink={true}
+          onChange={(event) => {
+            setJobs(event.target.value);
+          }}
+          size="small"
+          sx={{ mt: 1, mr: 1, width: 500 }}
+        />
+        <Tooltip title="Load list of jobs from a file">
+          <Button
+            onClick={() => getJobFile()}
+            size="small"
+            sx={{ mt: 2 }}
+            color="success"
+            variant="contained"
+          >
+            Load
+          </Button>
+        </Tooltip>
+      </Box>
+      <Box sx={{ height: innerHeight - 200, width: innerWidth - 140 }}>
         <DataGridPro
           apiRef={tableRef}
           // autoPageSize={true}
           getRowHeight={() => 35}
           rows={rows}
+          density="compact"
           columns={cols}
           checkboxSelection
           disableSelectionOnClick
           disableRowSelectionOnClick
           rowReordering
           onRowOrderChange={handleRowOrderChange}
+          slots={{ toolbar: GridToolbar }}
+          disableDensitySelector
+          initialState={{
+            pinnedColumns: {
+              left: [
+                GRID_REORDER_COL_DEF.field,
+                GRID_CHECKBOX_SELECTION_COL_DEF.field,
+                "path",
+              ],
+            },
+          }}
         />
       </Box>
-    </>
+      {/* Dialog with General info about this screen */}
+      <Dialog
+        fullWidth
+        maxWidth="xl"
+        onClose={() => setOpenInfo(false)}
+        open={openInfo}
+      >
+        <DialogTitle>Info about this screen</DialogTitle>
+        <DialogContent>
+          <Box sx={{ color: "black", fontSize: 13 }}>
+            On the URL you can specify some parameters:
+            <ul>
+              <li>
+                <b>path=</b> specifies a folder to display jobs from, e.g.
+                path=/general/biostat/jobs/utils/dev/jobs
+              </li>
+              <li>
+                <b>job=</b> specifies a JSON file that has an ordered array of
+                objects with job info. Each object has the path to a job in
+                LSAF, e.g. path=/general/biostat/jobs/utils/dev/jobs
+              </li>
+              <li>
+                <b>checkevery=</b> specifies how to check the status of a
+                submitted job every number of seconds
+              </li>
+              <li>
+                <b>maxWaitSecs=</b> specifies how long to wait for a job to
+                complete before moving on to the next one
+              </li>
+            </ul>{" "}
+            <br />
+            You could use this sample JSON file with jobs to be run, which is
+            located on LSAF PROD at:{" "}
+            <b>/general/biostat/apps/jobrunner/sample_jobs.json</b>
+            {/* (view it{" "}
+            <b>
+              <Link
+                href="https://xarprod.ondemand.sas.com:8000/lsaf/webdav/repo/general/biostat/apps/view/index.html?lsaf=/general/biostat/apps/jobrunner/sample_jobs.json"
+                target="_blank"
+                rel="noreferrer"
+                color="blue"
+                underline="always"
+              >
+                here
+              </Link>
+            </b>). */}
+            <br />
+            You could use a SAS program to create the JSON file with job paths,
+            using a program like this:{" "}
+            <b>/general/biostat/apps/jobrunner/make_a_jobs_file.sas</b>
+            {/* <b>
+              <Link
+                href="https://xarprod.ondemand.sas.com:8000/lsaf/webdav/repo/general/biostat/apps/fileviewer/index.html?file=https://xarprod.ondemand.sas.com:8000/lsaf/webdav/repo/general/biostat/apps/jobrunner/make_a_jobs_file.sas"
+                target="_blank"
+                rel="noreferrer"
+                color="blue"
+                underline="always"
+              >
+                this
+              </Link>
+            </b> */}
+            <p />
+            <b>
+              {" "}
+              <a
+                href="https://xarprod.ondemand.sas.com:8000/lsaf/filedownload/sdd%3A///general/biostat/apps/logviewer/bookmarklet.html"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Bookmarklets
+              </a>
+            </b>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </ThemeProvider>
   );
 }
