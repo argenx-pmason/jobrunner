@@ -74,7 +74,7 @@ export default function MyComponent() {
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
-          return text;
+          return <Tooltip title={params.value}>{text}</Tooltip>;
         },
       },
       { field: "status", headerName: "Status", width: 200 },
@@ -232,6 +232,20 @@ export default function MyComponent() {
       console.log("jobs found from getChildren: ", response, newRows, status);
       setRows(newRows);
     },
+    addJobs = async () => {
+      const response = await getChildren(api, token, path, setStatus),
+        newRows = response.items
+          .filter((i) => i?.path.endsWith(".job"))
+          .map((i, id) => ({ id: id, path: i?.path }));
+      console.log("jobs found from getChildren: ", response, newRows, status);
+      setRows((oldRows) => {
+        const _newRows = oldRows
+          .concat(newRows)
+          .map((i, id) => ({ ...i, id: id }));
+        console.log("newRows", _newRows);
+        return _newRows;
+      });
+    },
     getJobFile = async () => {
       const response = await fetch(webDavPrefix + jobs),
         _newRows = await response.json();
@@ -242,6 +256,23 @@ export default function MyComponent() {
       setStatus(response.status);
       console.log("getJobFile - fetch: ", response);
       setRows(newRows);
+    },
+    addJobFile = async () => {
+      const response = await fetch(webDavPrefix + jobs),
+        _newRows = await response.json();
+      console.log("_newRows", _newRows);
+      const newRows = _newRows
+        .filter((i) => i?.path.endsWith(".job"))
+        .map((i, id) => ({ id: id, path: i?.path }));
+      setStatus(response.status);
+      console.log("addJobFile - fetch: ", response);
+      setRows((oldRows) => {
+        const _newRows = oldRows
+          .concat(newRows)
+          .map((i, id) => ({ ...i, id: id }));
+        console.log("newRows", _newRows);
+        return _newRows;
+      });
     };
 
   useEffect(() => {
@@ -425,14 +456,27 @@ export default function MyComponent() {
               sx={{ mt: 1, mb: 1, ml: 3 }}
             />
           </Tooltip>
-          <Button
-            sx={{ ml: 3, width: "100" }}
-            onClick={handleRunJobs}
-            size="small"
-            variant="contained"
-          >
-            Run
-          </Button>
+          <Tooltip title="Run the selected jobs">
+            <Button
+              sx={{ ml: 3, width: "100" }}
+              onClick={handleRunJobs}
+              size="small"
+              variant="contained"
+            >
+              Run
+            </Button>
+          </Tooltip>
+          <Tooltip title="Save the list of jobs">
+            <Button
+              disabled
+              sx={{ ml: 1, width: "100" }}
+              // onClick={handleRunJobs}
+              size="small"
+              variant="contained"
+            >
+              Save
+            </Button>
+          </Tooltip>
 
           {status !== null && status !== 200 ? (
             <Chip
@@ -458,7 +502,7 @@ export default function MyComponent() {
       </AppBar>
       <Box sx={{ height: 60 }}>
         <TextField
-          label="Path to jobs"
+          label="Path to folder containing jobs"
           variant="outlined"
           value={path || ""}
           onChange={(event) => {
@@ -471,15 +515,26 @@ export default function MyComponent() {
           <Button
             onClick={() => getJobs()}
             size="small"
-            sx={{ mt: 2, mr: 2 }}
+            sx={{ mt: 2, mr: 1 }}
             color="secondary"
             variant="contained"
           >
             Load
           </Button>
         </Tooltip>
+        <Tooltip title="Add jobs from an LSAF folder">
+          <Button
+            onClick={() => addJobs()}
+            size="small"
+            sx={{ mt: 2, mr: 2 }}
+            color="warning"
+            variant="contained"
+          >
+            Add
+          </Button>
+        </Tooltip>
         <TextField
-          label="Path to jobs file"
+          label="Path to JSON file containing jobs"
           variant="outlined"
           value={jobs || ""}
           // shrink={true}
@@ -493,11 +548,22 @@ export default function MyComponent() {
           <Button
             onClick={() => getJobFile()}
             size="small"
-            sx={{ mt: 2 }}
+            sx={{ mt: 2, mr: 1 }}
             color="success"
             variant="contained"
           >
             Load
+          </Button>
+        </Tooltip>
+        <Tooltip title="Add list of jobs from a file">
+          <Button
+            onClick={() => addJobFile()}
+            size="small"
+            sx={{ mt: 2, mr: 2 }}
+            color="warning"
+            variant="contained"
+          >
+            Add
           </Button>
         </Tooltip>
       </Box>
