@@ -53,6 +53,59 @@ export const logon = (api, username, encryptedPassword, setToken) => {
     .catch((error) => console.error(error));
 };
 
+export const getJobParms = async (api, token, file) => {
+  const apiRequest = `/repository/files/${file}?component=contents`,
+    myHeaders = new Headers();
+  myHeaders.append("X-Auth-Token", token);
+  const requestOptions = {
+    method: "GET",
+    headers: myHeaders,
+    redirect: "follow",
+  };
+  return (
+    fetch(api + apiRequest, requestOptions)
+      .then((response) => {
+        console.log("getJobParms - response", response);
+        return response.text();
+      })
+      // .then((str) => new window.DOMParser().parseFromString(str, "text/xml"))
+      .then((data) => {
+        const dataJSON = convert.xml2js(data, {
+          compact: true,
+          spaces: 4,
+        });
+        console.log("getJobParms - dataJSON", dataJSON);
+        const { job } = dataJSON,
+          { parameters } = job,
+          charParms = parameters["character-parameter"];
+        const jobParameters = {};
+        if (charParms) {
+          let _charParms = charParms;
+          if (!Array.isArray(charParms)) {
+            _charParms = [charParms];
+          }
+          _charParms.forEach((c, i) => {
+            const name = c["_attributes"].name,
+              value = c["_text"] || "";
+            console.log(i, name, value);
+            jobParameters[name] = value;
+          });
+        }
+        console.log(
+          "getJobParms - responseText",
+          jobParameters,
+          "charParms",
+          charParms
+        );
+        return jobParameters;
+      })
+      .catch((error) => {
+        console.error(error);
+        return error;
+      })
+  );
+};
+
 export const submitJob = (api, jobPath, token) => {
   console.log("submitJob - api", api, "jobPath", jobPath, "token", token);
   const myHeaders = new Headers();
@@ -84,6 +137,48 @@ export const submitJob = (api, jobPath, token) => {
     });
 };
 
+export const submitJobWithParms = (api, jobPath, token, parmsToUse) => {
+  console.log(
+    "submitJobWithParms - api",
+    api,
+    "jobPath",
+    jobPath,
+    "token",
+    token,
+    "parmsToUse",
+    parmsToUse
+  );
+  const myHeaders = new Headers();
+  myHeaders.append("X-Auth-Token", token);
+  myHeaders.append("Content-Type", "application/json");
+  const requestOptions = {
+    method: "PUT",
+    headers: myHeaders,
+    redirect: "follow",
+    body: parmsToUse,
+  };
+  return fetch(
+    api + "/jobs/repository" + jobPath + "?action=run",
+    requestOptions
+  )
+    .then((response) => {
+      console.log("submitJobWithParms - response", response);
+      return response.json();
+    })
+    .then((responseJson) => {
+      console.log("submitJobWithParms - responseJson", responseJson);
+      // document.title = responseJson?.status?.type + " (" + responseJson?.status?.code + ")";
+      return {
+        submissionId: responseJson?.submissionId,
+        status: responseJson?.status?.type,
+      };
+    })
+    .catch((error) => {
+      console.error(error);
+      return { submissionId: "", status: error };
+    });
+};
+
 export const waitTillJobCompletes = async (
   api,
   submissionId,
@@ -102,7 +197,10 @@ export const waitTillJobCompletes = async (
     "token",
     token
   );
-  while (!thisStatus.startsWith("COMPLETED") && !thisStatus.startsWith("FAILED") ) {
+  while (
+    !thisStatus.startsWith("COMPLETED") &&
+    !thisStatus.startsWith("FAILED")
+  ) {
     console.log("completed", thisStatus);
     await sleep(checkEvery * 1000);
     thisStatus = await getJobStatus(api, submissionId, token);
@@ -167,6 +265,22 @@ export const upload = async (
   comment = "uploaded using upload REST API",
   version = "MINOR"
 ) => {
+  console.log(
+    "api",
+    api,
+    "path",
+    path,
+    "fileContent",
+    fileContent,
+    "token",
+    token,
+    "overwrite",
+    overwrite,
+    "comment",
+    comment,
+    "version",
+    version
+  );
   const url = api,
     apiRequest =
       "/repository/files" +
@@ -346,7 +460,7 @@ export const getFileVersions = async (api, token, file) => {
       return response.text();
     })
     .then((responseText) => {
-      const parsed=JSON.parse(responseText)
+      const parsed = JSON.parse(responseText);
       console.log("getFileVersions - responseText", parsed);
       return parsed;
     })
@@ -367,11 +481,11 @@ export const getChildren = async (api, token, path, setStatus) => {
   return fetch(api + apiRequest, requestOptions)
     .then((response) => {
       console.log("getChildren - response", response);
-      setStatus(response.status)
+      setStatus(response.status);
       return response.text();
     })
     .then((responseText) => {
-      const parsed=JSON.parse(responseText)
+      const parsed = JSON.parse(responseText);
       console.log("getChildren - responseText", parsed);
       return parsed;
     })
@@ -395,7 +509,7 @@ export const checkout = async (api, token, path) => {
       return response.text();
     })
     .then((responseText) => {
-      const parsed=JSON.parse(responseText)
+      const parsed = JSON.parse(responseText);
       console.log("checkout - responseText", parsed);
       return parsed;
     })
@@ -419,7 +533,7 @@ export const checkin = async (api, token, path) => {
       return response.text();
     })
     .then((responseText) => {
-      const parsed=JSON.parse(responseText)
+      const parsed = JSON.parse(responseText);
       console.log("checkin - responseText", parsed);
       return parsed;
     })
@@ -443,7 +557,7 @@ export const undocheckout = async (api, token, path) => {
       return response.text();
     })
     .then((responseText) => {
-      const parsed=JSON.parse(responseText)
+      const parsed = JSON.parse(responseText);
       console.log("undocheckout - responseText", parsed);
       return parsed;
     })

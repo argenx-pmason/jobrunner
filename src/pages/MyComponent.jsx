@@ -28,7 +28,7 @@ import { LicenseInfo } from "@mui/x-license";
 import {
   encryptPassword,
   logon,
-  submitJob,
+  submitJobWithParms,
   upload,
   waitTillJobCompletes,
   getPathManifest,
@@ -39,6 +39,7 @@ import {
   checkout,
   checkin,
   undocheckout,
+  getJobParms,
 } from "../utility";
 import localJobs from "../localJobs.json";
 
@@ -61,6 +62,7 @@ export default function MyComponent() {
     [logViewer, setLogViewer] = useState(null),
     [status, setStatus] = useState(null),
     [openInfo, setOpenInfo] = useState(false),
+    [saveStatus, setSaveStatus] = useState(null),
     lightTheme = createTheme({
       palette: {
         mode: "light",
@@ -71,18 +73,26 @@ export default function MyComponent() {
         field: "path",
         headerName: "Path",
         width: 500,
+        editable: false,
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
           return <Tooltip title={params.value}>{text}</Tooltip>;
         },
       },
-      { field: "status", headerName: "Status", width: 200 },
-      { field: "submissionId", headerName: "Submission ID", width: 200 },
+      { field: "parms", headerName: "Parms", width: 200, editable: true },
+      { field: "status", headerName: "Status", width: 200, editable: false },
+      {
+        field: "submissionId",
+        headerName: "Submission ID",
+        width: 200,
+        editable: false,
+      },
       {
         field: "manifest",
         headerName: "Manifest",
         width: 200,
+        editable: false,
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
@@ -101,6 +111,7 @@ export default function MyComponent() {
         field: "log",
         headerName: "Log",
         width: 200,
+        editable: false,
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
@@ -119,6 +130,7 @@ export default function MyComponent() {
         field: "lst",
         headerName: "List",
         width: 200,
+        editable: false,
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
@@ -137,6 +149,7 @@ export default function MyComponent() {
         field: "program",
         headerName: "Program(s)",
         width: 200,
+        editable: false,
         renderCell: (params) => {
           if (!params.value || !params.value.includes("/")) return null;
           const text = params.value.split("/").pop();
@@ -155,6 +168,7 @@ export default function MyComponent() {
         field: "output",
         headerName: "Output",
         width: 1200,
+        editable: false,
         renderCell: (params) => {
           if (!params.value) return null;
           const links = params.value.map((o, id) => {
@@ -204,6 +218,7 @@ export default function MyComponent() {
       setStart(true);
     },
     tableRef = useRef(),
+    pathRef = useRef(),
     [checkEvery, setCheckEvery] = useState(5),
     [maxWaitSecs, setMaxWaitSecs] = useState(600),
     updateRowPosition = (initialIndex, newIndex, rows) => {
@@ -224,6 +239,41 @@ export default function MyComponent() {
       );
       setRows(newRows);
     },
+    getParms = async (newRows) => {
+      console.log("getParms - newRows: ", newRows);
+      if (!newRows || newRows.length === 0) return;
+      await newRows.forEach(async (r) => {
+        if (!r.parms) {
+          const response = await getJobParms(api, token, r.path);
+          console.log("getJobParms - response: ", response);
+          // put parms into the row
+          r.parms = JSON.stringify(response);
+        }
+      });
+      return newRows;
+    },
+    handleSave = async () => {
+      const selectedRows = tableRef.current.getSelectedRows(),
+        rowsToSave = [...selectedRows].map(([type, value]) => ({
+          path: value.path,
+          parms: value.parms,
+        })),
+        pathToJson = pathRef.current.value;
+      console.log(
+        "handleSave - pathToJson: ",
+        pathToJson,
+        "selectedRows",
+        selectedRows,
+        "rowsToSave: ",
+        rowsToSave
+      );
+      const response = await upload(api, pathToJson, rowsToSave, token, true);
+      setSaveStatus(response);
+      console.log("response from handleSave: ", response);
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 10000);
+    },
     getJobs = async () => {
       const response = await getChildren(api, token, path, setStatus),
         newRows = response.items
@@ -231,6 +281,11 @@ export default function MyComponent() {
           .map((i, id) => ({ id: id, path: i?.path }));
       console.log("jobs found from getChildren: ", response, newRows, status);
       setRows(newRows);
+      const rows2 = await getParms(newRows);
+      setTimeout(() => {
+        console.log("rows2", rows2);
+        setRows((prev) => [...rows2]);
+      }, 3000);
     },
     addJobs = async () => {
       const response = await getChildren(api, token, path, setStatus),
@@ -245,6 +300,11 @@ export default function MyComponent() {
         console.log("newRows", _newRows);
         return _newRows;
       });
+      const rows2 = await getParms(newRows);
+      setTimeout(() => {
+        console.log("rows2", rows2);
+        setRows((prev) => [...rows2]);
+      }, 3000);
     },
     getJobFile = async () => {
       const response = await fetch(webDavPrefix + jobs),
@@ -256,6 +316,11 @@ export default function MyComponent() {
       setStatus(response.status);
       console.log("getJobFile - fetch: ", response);
       setRows(newRows);
+      const rows2 = await getParms(newRows);
+      setTimeout(() => {
+        console.log("rows2", rows2);
+        setRows((prev) => [...rows2]);
+      }, 3000);
     },
     addJobFile = async () => {
       const response = await fetch(webDavPrefix + jobs),
@@ -273,6 +338,11 @@ export default function MyComponent() {
         console.log("newRows", _newRows);
         return _newRows;
       });
+      const rows2 = await getParms(newRows);
+      setTimeout(() => {
+        console.log("rows2", rows2);
+        setRows((prev) => [...rows2]);
+      }, 3000);
     };
 
   useEffect(() => {
@@ -375,8 +445,13 @@ export default function MyComponent() {
     console.log("Run jobs", rows);
     const runJobs = async () => {
       for (const row of rows) {
-        console.log("Run job", row.path);
-        const subResp = await submitJob(api, row.path, token);
+        console.log("Run job", "row.path", row.path, "row.parms", row.parms);
+        const subResp = await submitJobWithParms(
+          api,
+          row.path,
+          token,
+          row.parms
+        );
         console.log("response from submitJob: ", subResp);
         const { submissionId } = subResp;
         row.submissionId = submissionId;
@@ -466,17 +541,26 @@ export default function MyComponent() {
               Run
             </Button>
           </Tooltip>
-          <Tooltip title="Save the list of jobs">
+          <Tooltip title="Save the list of selected jobs (with parms) into the JSON file specified below">
             <Button
-              disabled
+              // disabled
               sx={{ ml: 1, width: "100" }}
-              // onClick={handleRunJobs}
+              onClick={handleSave}
               size="small"
               variant="contained"
             >
               Save
             </Button>
           </Tooltip>
+
+          {saveStatus !== null ? (
+            <Chip
+              label={`${saveStatus}`}
+              color={saveStatus === "SUCCESS" ? "success" : "error"}
+              variant="filled"
+              sx={{ ml: 2 }}
+            />
+          ) : null}
 
           {status !== null && status !== 200 ? (
             <Chip
@@ -534,6 +618,7 @@ export default function MyComponent() {
           </Button>
         </Tooltip>
         <TextField
+          inputRef={pathRef}
           label="Path to JSON file containing jobs"
           variant="outlined"
           value={jobs || ""}
@@ -576,8 +661,8 @@ export default function MyComponent() {
           density="compact"
           columns={cols}
           checkboxSelection
-          disableSelectionOnClick
-          disableRowSelectionOnClick
+          // disableSelectionOnClick
+          // disableRowSelectionOnClick
           rowReordering
           onRowOrderChange={handleRowOrderChange}
           slots={{ toolbar: GridToolbar }}
