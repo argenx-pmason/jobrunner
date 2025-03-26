@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogContent,
   IconButton,
+  ButtonGroup,
   Button,
   Tooltip,
   Link,
@@ -17,7 +18,14 @@ import {
 } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
-import { Info } from "@mui/icons-material";
+import {
+  Add,
+  DirectionsRun,
+  FolderOpen,
+  Info,
+  Save,
+  Visibility,
+} from "@mui/icons-material";
 import {
   DataGridPro,
   GridToolbar,
@@ -42,6 +50,7 @@ import {
   getJobParms,
 } from "../utility";
 import localJobs from "../localJobs.json";
+import { v4 as uuidv4 } from "uuid";
 
 export default function MyComponent() {
   LicenseInfo.setLicenseKey(
@@ -55,13 +64,14 @@ export default function MyComponent() {
     [message, setMessage] = useState(null),
     [openSnackbar, setOpenSnackbar] = useState(false),
     [rows, setRows] = useState([]),
-    // localJobs.map((row, index) => ({ id: index, ...row })
+    // localJobs.map((row, index) => ({ id: uuidv4(), ...row })
     [webDavPrefix, setWebDavPrefix] = useState(null),
     [fileDownloadPrefix, setFileDownloadPrefix] = useState(null),
     [fileViewer, setFileViewer] = useState(null),
     [logViewer, setLogViewer] = useState(null),
     [status, setStatus] = useState(null),
     [openInfo, setOpenInfo] = useState(false),
+    [repo, setRepo] = useState("repository"),
     [saveStatus, setSaveStatus] = useState(null),
     lightTheme = createTheme({
       palette: {
@@ -239,17 +249,26 @@ export default function MyComponent() {
       );
       setRows(newRows);
     },
-    getParms = async (newRows) => {
-      console.log("getParms - newRows: ", newRows);
-      if (!newRows || newRows.length === 0) return;
+    getParms = async (newRows, useRepo = "repository") => {
+      console.log(
+        "getParms - newRows: ",
+        newRows,
+        "repo",
+        repo,
+        "useRepo",
+        useRepo
+      );
+      if (!newRows || newRows.length === 0) return newRows;
       await newRows.forEach(async (r) => {
-        if (!r.parms) {
-          const response = await getJobParms(api, token, r.path);
-          console.log("getJobParms - response: ", response);
-          // put parms into the row
-          r.parms = JSON.stringify(response);
-        }
+        // if (!r.parms) {
+        const response = await getJobParms(api, token, r.path, useRepo);
+        console.log("getJobParms - response: ", response);
+        // put parms into the row
+        r.parms = JSON.stringify(response);
+        setRows((prev) => [...newRows]); // try to see if this will make updates happen
+        // }
       });
+      // setRows((prev) => [...newRows]); // try to see if this will make updates happen
       return newRows;
     },
     handleSave = async () => {
@@ -267,7 +286,23 @@ export default function MyComponent() {
         "rowsToSave: ",
         rowsToSave
       );
-      const response = await upload(api, pathToJson, rowsToSave, token, true);
+      if (pathToJson.length === 0) {
+        setSaveStatus("Please specify a path to JSON file to save to");
+        setTimeout(() => {
+          setSaveStatus(null);
+        }, 10000);
+        return;
+      }
+      const response = await upload(
+        api,
+        pathToJson,
+        rowsToSave,
+        token,
+        true,
+        "uploaded using upload REST API",
+        "MINOR",
+        repo
+      );
       setSaveStatus(response);
       console.log("response from handleSave: ", response);
       setTimeout(() => {
@@ -275,35 +310,33 @@ export default function MyComponent() {
       }, 10000);
     },
     getJobs = async () => {
-      const response = await getChildren(api, token, path, setStatus),
+      const response = await getChildren(api, token, path, setStatus, repo),
         newRows = response.items
           .filter((i) => i?.path.endsWith(".job"))
-          .map((i, id) => ({ id: id, path: i?.path }));
+          .map((i, id) => ({ id: uuidv4(), path: i?.path }));
       console.log("jobs found from getChildren: ", response, newRows, status);
       setRows(newRows);
-      const rows2 = await getParms(newRows);
+      const rows2 = await getParms(newRows, repo);
       setTimeout(() => {
-        console.log("rows2", rows2);
+        console.log("getJobs - rows2", rows2);
         setRows((prev) => [...rows2]);
       }, 3000);
     },
     addJobs = async () => {
-      const response = await getChildren(api, token, path, setStatus),
+      const response = await getChildren(api, token, path, setStatus, repo),
         newRows = response.items
           .filter((i) => i?.path.endsWith(".job"))
-          .map((i, id) => ({ id: id, path: i?.path }));
+          .map((i, id) => ({ id: uuidv4(), path: i?.path }));
       console.log("jobs found from getChildren: ", response, newRows, status);
-      setRows((oldRows) => {
-        const _newRows = oldRows
-          .concat(newRows)
-          .map((i, id) => ({ ...i, id: id }));
-        console.log("newRows", _newRows);
-        return _newRows;
-      });
-      const rows2 = await getParms(newRows);
+      const rows2 = await getParms(newRows, repo);
       setTimeout(() => {
-        console.log("rows2", rows2);
-        setRows((prev) => [...rows2]);
+        setRows((oldRows) => {
+          const _newRows = oldRows
+            .concat(newRows)
+            .map((i) => ({ ...i, id: uuidv4() }));
+          console.log("oldRows", oldRows, "_newRows", _newRows, "rows2", rows2);
+          return _newRows;
+        });
       }, 3000);
     },
     getJobFile = async () => {
@@ -312,13 +345,13 @@ export default function MyComponent() {
       console.log("_newRows", _newRows);
       const newRows = _newRows
         .filter((i) => i?.path.endsWith(".job"))
-        .map((i, id) => ({ id: id, path: i?.path }));
+        .map((i, id) => ({ id: uuidv4(), path: i?.path }));
       setStatus(response.status);
       console.log("getJobFile - fetch: ", response);
       setRows(newRows);
-      const rows2 = await getParms(newRows);
+      const rows2 = await getParms(newRows, repo);
       setTimeout(() => {
-        console.log("rows2", rows2);
+        console.log("getJobFile - rows2", rows2);
         setRows((prev) => [...rows2]);
       }, 3000);
     },
@@ -328,20 +361,18 @@ export default function MyComponent() {
       console.log("_newRows", _newRows);
       const newRows = _newRows
         .filter((i) => i?.path.endsWith(".job"))
-        .map((i, id) => ({ id: id, path: i?.path }));
+        .map((i, id) => ({ id: uuidv4(), path: i?.path }));
       setStatus(response.status);
       console.log("addJobFile - fetch: ", response);
-      setRows((oldRows) => {
-        const _newRows = oldRows
-          .concat(newRows)
-          .map((i, id) => ({ ...i, id: id }));
-        console.log("newRows", _newRows);
-        return _newRows;
-      });
-      const rows2 = await getParms(newRows);
+      const rows2 = await getParms(newRows, repo);
       setTimeout(() => {
-        console.log("rows2", rows2);
-        setRows((prev) => [...rows2]);
+        setRows((oldRows) => {
+          const _newRows = oldRows
+            .concat(rows2)
+            .map((i, id) => ({ ...i, id: uuidv4() }));
+          console.log("addJobFile - newRows", _newRows);
+          return _newRows;
+        });
       }, 3000);
     };
 
@@ -377,7 +408,7 @@ export default function MyComponent() {
               host +
               "/lsaf/webdav/" +
               lsafType +
-              "/general/biostat/apps/encrypt/index.html"
+              "/general/biostat/apps/encrypt/index.html?app=jobrunner"
           )
           .focus();
       }, 3000);
@@ -418,8 +449,16 @@ export default function MyComponent() {
       _webDavPrefix = _lsaf + "/webdav/repo",
       _fileDownloadPrefix = _lsaf + "/filedownload/sdd:",
       _fileViewer =
-        _webDavPrefix + "/general/biostat/apps/fileviewer/index.html?file=",
-      _logViewer = `${fileDownloadPrefix}/general/biostat/apps/logviewer/index.html?log=`;
+        _webDavPrefix +
+        `/general/biostat/apps/fileviewer/index.html?file=https://${_realhost}/lsaf/webdav/${
+          repo === "repository" ? "repo" : "work"
+        }`,
+      _logViewer =
+        _webDavPrefix +
+        `/general/biostat/apps/logviewer/index.html?log=https://${_realhost}/lsaf/webdav/${
+          repo === "repository" ? "repo" : "work"
+        }`;
+    //  `${fileDownloadPrefix}/general/biostat/apps/logviewer/index.html?log=`;
     setWebDavPrefix(_webDavPrefix);
     setFileDownloadPrefix(_fileDownloadPrefix);
     setFileViewer(_fileViewer);
@@ -436,8 +475,55 @@ export default function MyComponent() {
     setJobs(_jobs);
     setCheckEvery(_checkEvery);
     setMaxWaitSecs(_maxWaitSecs);
-    console.log("_api", _api, "window", window);
-  }, [onClient]);
+    console.log(
+      "_api",
+      _api,
+      "window",
+      window,
+      "_fileDownloadPrefix",
+      _fileDownloadPrefix,
+      "_webDavPrefix",
+      _webDavPrefix
+    );
+  }, [onClient, repo]);
+
+  // useEffect(() => {
+  //   const { host: _host } = window.location;
+  //   let _realhost;
+  //   if (_host.includes("sharepoint")) {
+  //     _realhost = "xarprod.ondemand.sas.com";
+  //   } else if (_host.includes("localhost")) {
+  //     _realhost = "xartest.ondemand.sas.com";
+  //   } else {
+  //     _realhost = _host;
+  //   }
+
+  //   let _lsaf = "https://" + realhost + "/lsaf",
+  //     _webDavPrefix = _lsaf + "/webdav/repo",
+  //     _fileDownloadPrefix = _lsaf + "/filedownload/sdd:",
+  //     _fileViewer =
+  //       _webDavPrefix +
+  //       `/general/biostat/apps/fileviewer/index.html?file=https://${_realhost}/lsaf/webdav/${
+  //         repo === "repository" ? "repo" : "work"
+  //       }`,
+  //     _logViewer = `${_webDavPrefix}/general/biostat/apps/logviewer/index.html?log=https://${realhost}/lsaf/webdav/${
+  //       repo === "repository" ? "repo" : "work"
+  //     }`;
+  //   setFileDownloadPrefix(_fileDownloadPrefix);
+  //   setWebDavPrefix(_webDavPrefix);
+  //   setFileViewer(_fileViewer);
+  //   setLogViewer(_logViewer);
+  //   console.log(
+  //     "_webDavPrefix",
+  //     _webDavPrefix,
+  //     "_fileDownloadPrefix",
+  //     _fileDownloadPrefix,
+  //     "fileViewer",
+  //     _fileViewer,
+  //     "logViewer",
+  //     _logViewer
+  //   );
+  // }, [repo]);
 
   // run the jobs
   useEffect(() => {
@@ -450,7 +536,8 @@ export default function MyComponent() {
           api,
           row.path,
           token,
-          row.parms
+          row.parms,
+          repo
         );
         console.log("response from submitJob: ", subResp);
         const { submissionId } = subResp;
@@ -462,7 +549,8 @@ export default function MyComponent() {
           submissionId,
           token,
           checkEvery,
-          maxWaitSecs
+          maxWaitSecs,
+          repo
         );
         console.log("response from waitTillJobCompletes: ", checkResponse);
         row.status = checkResponse.status;
@@ -470,7 +558,12 @@ export default function MyComponent() {
         const manifestPath = await getPathManifest(api, submissionId, token);
         console.log("response from getPathManifest: ", manifestPath);
         row.manifest = manifestPath;
-        const manifestResponse = await getManifest(api, token, manifestPath);
+        const manifestResponse = await getManifest(
+          api,
+          token,
+          manifestPath,
+          repo
+        );
         console.log("response from getManifest: ", manifestResponse);
         row.log = manifestResponse.log_path;
         row.lst = manifestResponse.repository_path;
@@ -532,25 +625,39 @@ export default function MyComponent() {
             />
           </Tooltip>
           <Tooltip title="Run the selected jobs">
-            <Button
-              sx={{ ml: 3, width: "100" }}
+            <IconButton
+              sx={{
+                ml: 3,
+                width: "100",
+                border: 1,
+                borderRadius: 2,
+                borderColor: "black",
+              }}
               onClick={handleRunJobs}
               size="small"
               variant="contained"
+              color="success"
             >
-              Run
-            </Button>
+              <DirectionsRun />
+            </IconButton>
           </Tooltip>
           <Tooltip title="Save the list of selected jobs (with parms) into the JSON file specified below">
-            <Button
+            <IconButton
               // disabled
-              sx={{ ml: 1, width: "100" }}
+              sx={{
+                ml: 1,
+                width: "100",
+                border: 1,
+                borderRadius: 2,
+                borderColor: "black",
+              }}
               onClick={handleSave}
               size="small"
               variant="contained"
+              color="error"
             >
-              Save
-            </Button>
+              <Save />
+            </IconButton>
           </Tooltip>
 
           {saveStatus !== null ? (
@@ -570,6 +677,33 @@ export default function MyComponent() {
               sx={{ ml: 2 }}
             />
           ) : null}
+          <ButtonGroup sx={{ mt: 1, ml: 2 }} variant="outlined">
+            <Button
+              color={repo === "repository" ? "success" : "warning"}
+              variant={repo === "repository" ? "contained" : "outlined"}
+              size={"small"}
+              onClick={async () => {
+                setRepo("repository");
+                const _rows = await getParms(rows, "repository");
+                setRows(() => _rows);
+              }}
+            >
+              Repository
+            </Button>
+            <Button
+              color={repo === "workspace" ? "success" : "warning"}
+              variant={repo === "workspace" ? "contained" : "outlined"}
+              size={"small"}
+              onClick={async () => {
+                setRepo("workspace");
+                const _rows = await getParms(rows, "workspace");
+                console.log("rows", _rows);
+                setRows(() => _rows);
+              }}
+            >
+              Workspace
+            </Button>
+          </ButtonGroup>
           <Box sx={{ flexGrow: 1 }}></Box>
           <Tooltip title="Information about this screen">
             <IconButton
@@ -593,29 +727,41 @@ export default function MyComponent() {
             setPath(event.target.value);
           }}
           size="small"
-          sx={{ mt: 1, mr: 1, width: 500 }}
+          sx={{ mt: 1, mr: 1, width: (innerWidth - 140) / 2 - 150 }}
         />
         <Tooltip title="Load jobs from an LSAF folder">
-          <Button
+          <IconButton
             onClick={() => getJobs()}
             size="small"
-            sx={{ mt: 2, mr: 1 }}
-            color="secondary"
+            sx={{
+              mt: 2,
+              mr: 1,
+              border: 1,
+              borderRadius: 2,
+              borderColor: "black",
+            }}
+            color="primary"
             variant="contained"
           >
-            Load
-          </Button>
+            <FolderOpen />
+          </IconButton>
         </Tooltip>
         <Tooltip title="Add jobs from an LSAF folder">
-          <Button
+          <IconButton
             onClick={() => addJobs()}
             size="small"
-            sx={{ mt: 2, mr: 2 }}
+            sx={{
+              mt: 2,
+              mr: 2,
+              border: 1,
+              borderRadius: 2,
+              borderColor: "black",
+            }}
             color="warning"
             variant="contained"
           >
-            Add
-          </Button>
+            <Add />
+          </IconButton>
         </Tooltip>
         <TextField
           inputRef={pathRef}
@@ -627,29 +773,60 @@ export default function MyComponent() {
             setJobs(event.target.value);
           }}
           size="small"
-          sx={{ mt: 1, mr: 1, width: 500 }}
+          sx={{ mt: 1, mr: 1, width: (innerWidth - 140) / 2 - 150 }}
         />
         <Tooltip title="Load list of jobs from a file">
-          <Button
+          <IconButton
             onClick={() => getJobFile()}
             size="small"
-            sx={{ mt: 2, mr: 1 }}
-            color="success"
+            sx={{
+              mt: 2,
+              mr: 1,
+              border: 1,
+              borderRadius: 2,
+              borderColor: "black",
+            }}
+            color="primary"
             variant="contained"
           >
-            Load
-          </Button>
+            <FolderOpen />
+          </IconButton>
         </Tooltip>
         <Tooltip title="Add list of jobs from a file">
-          <Button
+          <IconButton
             onClick={() => addJobFile()}
             size="small"
-            sx={{ mt: 2, mr: 2 }}
+            sx={{
+              mt: 2,
+              mr: 1,
+              border: 1,
+              borderRadius: 2,
+              borderColor: "black",
+            }}
             color="warning"
             variant="contained"
           >
-            Add
-          </Button>
+            <Add />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="View the JSON file">
+          <IconButton
+            onClick={() =>
+              window.open(fileViewer + pathRef.current.value, "_blank")
+            }
+            size="small"
+            sx={{
+              mt: 2,
+              mr: 1,
+              border: 1,
+              borderRadius: 2,
+              borderColor: "black",
+            }}
+            color="secondary"
+            variant="contained"
+          >
+            <Visibility />
+          </IconButton>
         </Tooltip>
       </Box>
       <Box sx={{ height: innerHeight - 200, width: innerWidth - 140 }}>
@@ -687,7 +864,7 @@ export default function MyComponent() {
       >
         <DialogTitle>Info about this screen</DialogTitle>
         <DialogContent>
-          <Box sx={{ color: "black", fontSize: 13 }}>
+          <Box sx={{ fontSize: 13 }}>
             On the URL you can specify some parameters:
             <ul>
               <li>
@@ -740,15 +917,31 @@ export default function MyComponent() {
               </Link>
             </b> */}
             <p />
+            <p />
+            You can use the RESTAPI app to run a job. You can even pass a
+            parameter to automatically submit it, although by default you will
+            need to press the Submit button. Try it here:{" "}
+            <Link
+              href="https://xarprod.ondemand.sas.com:8000/lsaf/filedownload/sdd%3A/general/biostat/apps/restapi2/index.html?job=/general/biostat/jobs/utils/dev/jobs/folder_access_request.job&_extra=123&_name=phil"
+              target="_blank"
+              rel="noreferrer"
+              color="primary"
+              underline="always"
+            >
+              RESTAPI
+            </Link>
+            <p />
+            Click here for{" "}
             <b>
-              {" "}
-              <a
+              <Link
                 href="https://xarprod.ondemand.sas.com:8000/lsaf/filedownload/sdd%3A///general/biostat/apps/logviewer/bookmarklet.html"
                 target="_blank"
                 rel="noreferrer"
+                color="primary"
+                underline="always"
               >
                 Bookmarklets
-              </a>
+              </Link>
             </b>
           </Box>
         </DialogContent>
