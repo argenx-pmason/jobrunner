@@ -529,6 +529,8 @@ export default function MyComponent() {
   useEffect(() => {
     if (!start) return;
     console.log("Run jobs", rows);
+    let complete = 0;
+    document.title = `0/${rows.length} jobs run`;
     const runJobs = async () => {
       for (const row of rows) {
         console.log("Run job", "row.path", row.path, "row.parms", row.parms);
@@ -552,6 +554,8 @@ export default function MyComponent() {
           maxWaitSecs,
           repo
         );
+        complete = complete + 1;
+        document.title = `${complete}/${rows.length} jobs run`;
         console.log("response from waitTillJobCompletes: ", checkResponse);
         row.status = checkResponse.status;
         setRows((prev) => [...rows]);
